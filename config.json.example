@@ -1,0 +1,25 @@
+{
+    "privateKey": "",
+    "privateKeyNav": "",
+    "feeMint": 1.25,
+    "networks": {
+        "97": {
+            "electrum_host": "electrum-testnet.nav.community",
+            "electrum_port": 40004,
+            "baseCurrency": "BNB",
+            "stakingPoolAddress": "mvNmwHW9ZkYv66Y55Jcoj7S2vnKp7zCaXU",
+            "ethProvider": "http://116.203.31.145:7575",
+            "ethWssProvider": "ws://116.203.31.145:7576"
+        }
+    },
+    "coldStorage": {
+        "keys": [
+            ""
+        ],
+        "requiredSigs": 2,
+        "master": ""
+    },
+    "navConfirmations": 1,
+    "ethConfirmations": 1,
+    "defaultNavFee": 1e5
+}

@@ -1,0 +1,52 @@
+{
+  "name": "wrapped-navcoin",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "./node_modules/.bin/truffle test",
+    "compile": "./node_modules/.bin/truffle compile",
+    "deploy": "./node_modules/.bin/truffle deploy",
+    "coverage": "./node_modules/.bin/solidity-coverage",
+    "watchtower": "node ./watchtower.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/navcoin/wrapped-navcoin.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/navcoin/wrapped-navcoin/issues"
+  },
+  "homepage": "https://github.com/navcoin/wrapped-navcoin#readme",
+  "dependencies": {
+    "@codewarriorr/electrum-client-js": "^0.1.1",
+    "bignumber.js": "^7.2.1",
+    "bitcore-lib": "git://github.com/aguycalled/bitcore-lib.git",
+    "chai": "^4.3.1",
+    "chai-as-promised": "^7.1.1",
+    "chai-bignumber": "^2.0.2",
+    "crypto-balances": "^2.1.3",
+    "find-parent-dir": "^0.3.0",
+    "moment": "^2.29.1",
+    "net": "^1.0.2",
+    "node-binance-api": "^0.12.4",
+    "node-color-log": "^5.2.0",
+    "object-hash": "^2.1.1",
+    "openzeppelin-solidity": "1.12.0",
+    "rlp": "^2.1.0",
+    "solc": "^0.8.1",
+    "solhint": "^1.2.1",
+    "solidity-coverage": "^0.5.11",
+    "truffle": "5.1.65",
+    "truffle-hdwallet-provider": "^1.0.17",
+    "web3": "1.0.0-beta.35",
+    "yargs": "^12.0.2"
+  },
+  "devDependencies": {
+    "@openzeppelin/contracts-upgradeable": "^3.4.0",
+    "@openzeppelin/truffle-upgrades": "^1.5.0",
+    "@openzeppelin/upgrades": "^2.8.0"
+  }
+}
