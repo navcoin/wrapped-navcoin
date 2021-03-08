@@ -15,7 +15,6 @@ contract WNAV is ERC20PresetMinterPauserUpgradeable {
     {
         __ERC20PresetMinterPauser_init(name, symbol);
 
-        _owner = msg.sender;
         _feeAddress = msg.sender;
         _withdrawalFee = 1000000;
         _setupDecimals(8);
