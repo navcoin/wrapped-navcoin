@@ -82,6 +82,12 @@ let client = new ElectrumClient(
   "wss"
 )
 
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+} 
+
 const checkmark = '<span class="checkmark"><div class="checkmark_stem"></div><div class="checkmark_kick"></div></span>';
 
 const networkNames = { '1': 'Ethereum Mainnet', '3': 'Ethereum Ropsten', '97': 'Binance Smart Chain Testnet', '56': 'Binance Smart Chain Mainnet' };
@@ -125,7 +131,7 @@ const availableNetworks = document.getElementById('availableNetworks');
 let contractData = {}
 let contractAddress = ""
 let contract = undefined
-let globalNetworkId
+let globalNetworkId = 56
 let navNetwork = 'mainnet'
 let navAddressStr = ''
 let navAddressObj
@@ -241,7 +247,7 @@ const initialize = async () => {
 
     estimatedGasDiv.classList.remove('d-none')
 
-    var mintCost = (gasSize*gasPrice)/1000000000;
+    var mintCost = (gasSize*gasPrice)/100000000;
 
     gasCost = FEEMINT * (NAVETH / mintCost);
 
@@ -474,9 +480,9 @@ const initialize = async () => {
     footerSpan.classList.add('d-none')
     contentDiv.classList.add('d-none')
 
-    UpdateNavDepositAddress()
-
     RestartSubscriptions()
+
+    UpdateNavDepositAddress()
 
     if (isMetaMaskConnected()) {
       initializeAccountButtons()
@@ -517,8 +523,11 @@ const initialize = async () => {
     estimatedGasDiv.classList.add('d-none')
     contentDiv.classList.add('d-none')
     footerSpan.classList.add('d-none')
+
+    console.log("New network id "+networkId);
+
     globalNetworkId = networkId
-    if (networkId == 1) {
+    if (networkId == 1 || networkId == 56) {
       navNetwork = 'mainnet'
     } else {
       navNetwork = 'testnet'
@@ -566,7 +575,9 @@ const initialize = async () => {
       var navObj = Bitcore.HDPublicKey(obj).deriveChild(childPath).publicKey
 
       coldAddresses.push(navObj);
+      console.log("cold addresses "+navObj);
     }
+
 
     var multisigScript = Bitcore.Script.buildMultisigOut(coldAddresses, config["coldStorage"]["requiredSigs"])
     coldStorageScript = new Bitcore.Script.fromAddresses(electrumConfig[globalNetworkId]["stakingPoolAddress"], multisigScript)
@@ -575,9 +586,9 @@ const initialize = async () => {
     if (contract)
       GetHistory()
 
-    UpdateNavDepositAddress()
-
     RestartSubscriptions()
+
+    UpdateNavDepositAddress()
 
     updateButtons()
 
@@ -599,101 +610,108 @@ const initialize = async () => {
 
     if (isMetaMaskConnected() && contract && contract.methods && contract.methods.register && lastNavBlock != -1 && lastEthBlock != -1)
     {
-      await contract.getPastEvents(
-      "Registered",
-      { fromBlock: "0", toBlock: "latest", filter: {"a": window.Web3.utils.toChecksumAddress(accounts[0])}}, async (errors, events) => {
-        if (errors)
-        {
-          console.log("Error Registered: "+ errors);
-        }
-        else
-        {
-          for (var i in events) {
-            var timestamp = await window.Web3.eth.getBlock(events[i].blockNumber);
-            var confirmations = lastEthBlock-events[i].blockNumber >= config["ethConfirmations"] ? checkmark : Math.min(lastEthBlock-events[i].blockNumber,config["ethConfirmations"])+"/"+config["ethConfirmations"];
-            history.push({timestamp: timestamp.timestamp, event: "Registered", confirmations: confirmations})
-          }
-        }
-      });
+      var block = 6139248;
 
-      await contract.getPastEvents(
-      "MintedWithNote",
-      { fromBlock: "0", toBlock: "latest", filter: {"a": window.Web3.utils.toChecksumAddress(accounts[0])}}, async (errors, events) => {
-        if (errors)
-        {
-          console.log("Error Minted: "+ errors);
-        }
-        else
-        {
-          for (var i in events) {
-            var timestamp = await window.Web3.eth.getBlock(events[i].blockNumber);
-            var confirmations = lastEthBlock-events[i].blockNumber >= config["ethConfirmations"] ? checkmark : Math.min(lastEthBlock-events[i].blockNumber,config["ethConfirmations"])+"/"+config["ethConfirmations"];
-            history.push({timestamp: timestamp.timestamp, event: "Minted "+parseInt(events[i].returnValues["1"])/100000000+ " wNAV", confirmations: confirmations})
-          }
-        }
-      });
-
-
-      var burns = {};
-
-      await contract.getPastEvents(
-      "BurnedWithNote",
-      { fromBlock: "0", toBlock: "latest" }, async (errors, events) => {
-        if (errors)
-        {
-          console.log("Error BurnedWithNote: "+ errors);
-        }
-        else
-        {
-          var totalBurntValue = 0;
-
-          for (var i in events) {
-            totalBurntValue += parseInt(events[i].returnValues["1"]);
-            if (events[i].returnValues["a"] != window.Web3.utils.toChecksumAddress(accounts[0]))
-              continue;
-            burns[events[i].transactionHash] = events[i].returnValues["a"];
-            var timestamp = await window.Web3.eth.getBlock(events[i].blockNumber);
-            var confirmations = lastEthBlock-events[i].blockNumber >= config["ethConfirmations"] ? checkmark : Math.min(lastEthBlock-events[i].blockNumber,config["ethConfirmations"])+"/"+config["ethConfirmations"];
-            history.push({timestamp: timestamp.timestamp, event: "Burned "+parseInt(events[i].returnValues["1"])/100000000+ " wNAV", confirmations: confirmations})
-          }
-
-          var scriptHistory = await client.blockchain_scripthash_getHistory(coldStorageScriptHash)
-
-          var totalWithdrawnValue = 0;
-
-          for (var i in scriptHistory)
+      while (block < lastEthBlock)
+      {
+        await contract.getPastEvents(
+        "Registered",
+        { fromBlock: block, toBlock: Math.min(block+5000,lastEthBlock), filter: {"a": window.Web3.utils.toChecksumAddress(accounts[0])}}, async (errors, events) => {
+          if (errors)
           {
-            var tx = scriptHistory[i];
-
-            tx = await client.blockchain_transaction_get(tx.tx_hash, true)
-
-            try {
-              if (!tx.strdzeel) continue;
-
-              var json = JSON.parse(tx.strdzeel)
-              var jsonStrdzeel = json.burn
-
-              if (jsonStrdzeel["returnValues"] && jsonStrdzeel["returnValues"]["0"] && jsonStrdzeel["returnValues"]["1"] && jsonStrdzeel["returnValues"]["2"] && jsonStrdzeel["transactionHash"])
-              {
-                var value = 0
-
-                for (var out_index in tx.vout)
-                {
-                  if(tx.vout[out_index].scriptPubKey.addresses && tx.vout[out_index].scriptPubKey.addresses[0] == jsonStrdzeel["returnValues"]["2"])
-                    value += tx.vout[out_index].valueSat;
-                }
-                if (value > 0 && value == parseInt(jsonStrdzeel["returnValues"]["1"])-parseInt(DEFAULT_TX_FEE))
-                  totalWithdrawnValue += value+parseInt(DEFAULT_TX_FEE);
-              }
-            } catch (e) {
-              continue;
+            console.log("Error Registered: "+ errors);
+          }
+          else
+          {
+            for (var i in events) {
+              var timestamp = await window.Web3.eth.getBlock(events[i].blockNumber);
+              var confirmations = lastEthBlock-events[i].blockNumber >= config["ethConfirmations"] ? checkmark : Math.min(lastEthBlock-events[i].blockNumber,config["ethConfirmations"])+"/"+config["ethConfirmations"];
+              history.push({timestamp: timestamp.timestamp, event: "Registered", confirmations: confirmations})
             }
           }
+        });
 
-          if (totalBurntValue > 0)
-            pendingWithdrawalSupply.innerHTML = parseInt(totalBurntValue-totalWithdrawnValue)/100000000;
-        }
-      });
+        await contract.getPastEvents(
+        "MintedWithNote",
+        { fromBlock: block, toBlock: Math.min(block+5000,lastEthBlock), filter: {"a": window.Web3.utils.toChecksumAddress(accounts[0])}}, async (errors, events) => {
+          if (errors)
+          {
+            console.log("Error Minted: "+ errors);
+          }
+          else
+          {
+            for (var i in events) {
+              var timestamp = await window.Web3.eth.getBlock(events[i].blockNumber);
+              var confirmations = lastEthBlock-events[i].blockNumber >= config["ethConfirmations"] ? checkmark : Math.min(lastEthBlock-events[i].blockNumber,config["ethConfirmations"])+"/"+config["ethConfirmations"];
+              history.push({timestamp: timestamp.timestamp, event: "Minted "+parseInt(events[i].returnValues["1"])/100000000+ " wNAV", confirmations: confirmations})
+            }
+          }
+        });
+
+        var burns = {};
+
+        await contract.getPastEvents(
+        "BurnedWithNote",
+        { fromBlock: block, toBlock: Math.min(block+5000,lastEthBlock)}, async (errors, events) => {
+          if (errors)
+          {
+            console.log("Error BurnedWithNote: "+ errors);
+          }
+          else
+          {
+            var totalBurntValue = 0;
+
+            for (var i in events) {
+              totalBurntValue += parseInt(events[i].returnValues["1"]);
+              if (events[i].returnValues["a"] != window.Web3.utils.toChecksumAddress(accounts[0]))
+                continue;
+              burns[events[i].transactionHash] = events[i].returnValues["a"];
+              var timestamp = await window.Web3.eth.getBlock(events[i].blockNumber);
+              var confirmations = lastEthBlock-events[i].blockNumber >= config["ethConfirmations"] ? checkmark : Math.min(lastEthBlock-events[i].blockNumber,config["ethConfirmations"])+"/"+config["ethConfirmations"];
+              history.push({timestamp: timestamp.timestamp, event: "Burned "+parseInt(events[i].returnValues["1"])/100000000+ " wNAV", confirmations: confirmations})
+            }
+
+            var scriptHistory = await client.blockchain_scripthash_getHistory(coldStorageScriptHash)
+
+            var totalWithdrawnValue = 0;
+
+            for (var i in scriptHistory)
+            {
+              var tx = scriptHistory[i];
+
+              tx = await client.blockchain_transaction_get(tx.tx_hash, true)
+
+              try {
+                if (!tx.strdzeel) continue;
+
+                var json = JSON.parse(tx.strdzeel)
+                var jsonStrdzeel = json.burn
+
+                if (jsonStrdzeel["returnValues"] && jsonStrdzeel["returnValues"]["0"] && jsonStrdzeel["returnValues"]["1"] && jsonStrdzeel["returnValues"]["2"] && jsonStrdzeel["transactionHash"])
+                {
+                  var value = 0
+
+                  for (var out_index in tx.vout)
+                  {
+                    if(tx.vout[out_index].scriptPubKey.addresses && tx.vout[out_index].scriptPubKey.addresses[0] == jsonStrdzeel["returnValues"]["2"])
+                      value += tx.vout[out_index].valueSat;
+                  }
+                  if (value > 0 && value == parseInt(jsonStrdzeel["returnValues"]["1"])-parseInt(DEFAULT_TX_FEE))
+                    totalWithdrawnValue += value+parseInt(DEFAULT_TX_FEE);
+                }
+              } catch (e) {
+                continue;
+              }
+            }
+
+            if (totalBurntValue > 0)
+              pendingWithdrawalSupply.innerHTML = parseInt(totalBurntValue-totalWithdrawnValue)/100000000;
+          }
+        });
+
+        block += 5000;
+      }
+
 
       var scriptHistory = await client.blockchain_scripthash_getHistory(scriptHash)
 
@@ -840,7 +858,11 @@ const initialize = async () => {
       "wss"
     )
 
+    console.log("connecting to "+electrumConfig[globalNetworkId]["electrum_host"]+":"+electrumConfig[globalNetworkId]["electrum_port"]);
+
     await client.connect()
+
+    await sleep(1500);
 
     client.subscribe.on('blockchain.headers.subscribe', NewNavBlockHeader);
     client.blockchain_headers_subscribe();

@@ -34,6 +34,7 @@
     "net": "^1.0.2",
     "node-binance-api": "^0.12.4",
     "qrcode": "^1.4.4",
+    "sleep": "^6.3.0",
     "style-loader": "^2.0.0",
     "tls": "0.0.1",
     "toastr": "^2.1.4",
