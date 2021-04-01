@@ -49,7 +49,7 @@ $.ajax({
 const XPUBKEY = config["publicKeyNav"];
 const electrumConfig = config["networks"];
 const FEEMINT = config["feeMint"];
-const DEFAULT_TX_FEE = config["defaultNavFee"];
+let DEFAULT_TX_FEE = config["defaultNavFee"];
 
 console.log("Default withdrawal fee "+DEFAULT_TX_FEE);
 
@@ -77,8 +77,8 @@ const isBinanceInstalled = () => {
 }
 
 let client = new ElectrumClient(
-  electrumConfig[1]["electrum_host"],
-  electrumConfig[1]["electrum_port"],
+  electrumConfig[56]["electrum_host"],
+  electrumConfig[56]["electrum_port"],
   "wss"
 )
 
@@ -101,6 +101,7 @@ const withdrawModal = document.getElementById('withdrawModal')
 const withdrawAmountLabel = document.getElementById('withdrawAmountLabel')
 const withdrawFeeLabel = document.getElementById('withdrawFeeLabel')
 const historyDiv = document.getElementById('historyDiv')
+const networkName = document.getElementById('networkName')
 
 const pendingLoader = document.getElementById('pendingLoader')
 const pendingDiv = document.getElementById('pendingDiv')
@@ -248,7 +249,12 @@ const initialize = async () => {
       estimatedGas.innerHTML = parseFloat(parseInt(gasCost * 100)/100);
 
     if (contract)
+    {
+      DEFAULT_TX_FEE = await contract.methods.getMinFee().call();
+      withdrawFeeLabel.innerHTML = parseInt(DEFAULT_TX_FEE)/100000000
+      withdrawAmountLabel.innerHTML = withdrawAmount.value?(parseFloat(withdrawAmount.value)-(parseInt(DEFAULT_TX_FEE)/100000000)):0
       GetHistory()
+    }
 
     CheckRegistered()
     UpdateBalance()
@@ -346,7 +352,7 @@ const initialize = async () => {
       } catch (error) {
         console.error(error)
       }
-      withdrawAmount.value = 0
+      withdrawAmount.value= ""
       withdrawAddress.value = ""
       withdrawFeeLabel.innerHTML = 0
     }
@@ -517,6 +523,8 @@ const initialize = async () => {
     } else {
       navNetwork = 'testnet'
     }
+
+    networkName.innerHTML = networkNames[globalNetworkId];
 
     $.getJSON("https://api.binance.com/api/v3/klines?symbol=NAVBTC&interval=15m&limit=2", (data) => {
       NAVBTC = data[0][4];

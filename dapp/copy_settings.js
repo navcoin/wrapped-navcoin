@@ -8,5 +8,6 @@ console.log(JSON.stringify({
   coldStorage: config["coldStorage"],
   navConfirmations: config["navConfirmations"],
   ethConfirmations: config["ethConfirmations"],
-  defaultNavFee: config[ "defaultNavFee"]
+  defaultNavFee: config[ "defaultNavFee"],
+  signers: config["coldStorage"]["keys"]
 }));

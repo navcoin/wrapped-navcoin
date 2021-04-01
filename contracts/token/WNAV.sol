@@ -16,7 +16,7 @@ contract WNAV is ERC20PresetMinterPauserUpgradeable {
         __ERC20PresetMinterPauser_init(name, symbol);
 
         _feeAddress = msg.sender;
-        _withdrawalFee = 100000;
+        _withdrawalFee = 400000;
         _setupDecimals(8);
     }
 
@@ -50,9 +50,17 @@ contract WNAV is ERC20PresetMinterPauserUpgradeable {
         _feeAddress = _to;
     }
 
+    function getFeeAddress() public view returns (address) {
+        return _feeAddress;
+    }
+
     function setMinFee(uint256 _fee) public {
         require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "ERROR: must have admin role");
         _withdrawalFee = _fee;
+    }
+
+    function getMinFee() public view returns (uint256) {
+        return _withdrawalFee;
     }
 
     function existsMint(string memory _note) public view returns (bool) {

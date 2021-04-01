@@ -1,6 +1,7 @@
 var path = require('path');
 var Web3 = require('web3');
 const bitcore = require('bitcore-lib');
+const web3 = new Web3();
 
 var HDWalletProvider = require("truffle-hdwallet-provider");
 
@@ -9,14 +10,19 @@ const fs = require('fs');
 const config = JSON.parse(fs.readFileSync("config.json").toString());
 
 let PRIVATE_KEY = config["privateKey"];
-const PRIVATE_KEY_NAV = config["privateKeyNav"];
+let PRIVATE_KEY_DEPLOYER = config["privateKeyDeploy"];
+let PRIVATE_KEY_NAV = config["privateKeyNav"];
 
-if (!PRIVATE_KEY_NAV)
+if (!PRIVATE_KEY_NAV || !PRIVATE_KEY)
 {
-  console.log("Generating NAV private key...");
-  console.log("Please don't forget to back up config.json!");
-  PRIVATE_KEY_NAV = bitcore.HDPrivateKey().toString();
-  config["privateKeyNav"] = PRIVATE_KEY_NAV;
+  if (!PRIVATE_KEY_NAV)
+  {
+    console.log("Generating NAV private key...");
+    PRIVATE_KEY_NAV = bitcore.HDPrivateKey().toString();
+    config["privateKeyNav"] = PRIVATE_KEY_NAV;
+  }
+
+  console.log("Please don't forget to back up config.json!\n");
 }
 
 const XPUBKEY = bitcore.HDPrivateKey(PRIVATE_KEY_NAV).hdPublicKey.toString();
@@ -53,7 +59,7 @@ module.exports = {
   networks: {
     development: {
       provider: function() {
-        return PRIVATE_KEY ? new HDWalletProvider(PRIVATE_KEY, config["networks"]["123"]["ethProvider"]) : new Web3.providers.HttpProvider(config["networks"]["123"]["ethProvider"])
+        return PRIVATE_KEY_DEPLOYER ? new HDWalletProvider(PRIVATE_KEY_DEPLOYER, config["networks"]["123"]["ethProvider"]) : new Web3.providers.HttpProvider(config["networks"]["123"]["ethProvider"])
       },
       wsprovider: function() {
         const webSocketProvider = new Web3.providers.WebsocketProvider(config["networks"]["123"]["ethWssProvider"])
@@ -67,10 +73,15 @@ module.exports = {
     },
     bscmainnet: {
       provider: function() {
-        return PRIVATE_KEY ? new HDWalletProvider(PRIVATE_KEY, config["networks"]["56"]["ethProvider"]) : new Web3.providers.HttpProvider(config["networks"]["56"]["ethProvider"])
+        return PRIVATE_KEY_DEPLOYER ? new HDWalletProvider(PRIVATE_KEY_DEPLOYER, config["networks"]["56"]["ethProvider"]) : new Web3.providers.HttpProvider(config["networks"]["56"]["ethProvider"])
       },
       wsprovider: function() {
-        const webSocketProvider = new Web3.providers.WebsocketProvider(config["networks"]["56"]["ethWssProvider"])
+        const webSocketProvider = new Web3.providers.WebsocketProvider(config["networks"]["56"]["ethWssProvider"], {
+          clientConfig: {
+            maxReceivedFrameSize: 100000000,
+            maxReceivedMessageSize: 100000000,
+          }
+        })
         if (!PRIVATE_KEY) return webSocketProvider;
         HDWalletProvider.prototype.on = webSocketProvider.on.bind(webSocketProvider)
         return new HDWalletProvider(PRIVATE_KEY, webSocketProvider)
@@ -81,10 +92,15 @@ module.exports = {
     },
     bsctestnet: {
       provider: function() {
-        return PRIVATE_KEY ? new HDWalletProvider(PRIVATE_KEY, config["networks"]["97"]["ethProvider"]) : new Web3.providers.HttpProvider(config["networks"]["97"]["ethProvider"])
+        return PRIVATE_KEY_DEPLOYER ? new HDWalletProvider(PRIVATE_KEY_DEPLOYER, config["networks"]["97"]["ethProvider"]) : new Web3.providers.HttpProvider(config["networks"]["97"]["ethProvider"])
       },
       wsprovider: function() {
-        const webSocketProvider = new Web3.providers.WebsocketProvider(config["networks"]["97"]["ethWssProvider"])
+        const webSocketProvider = new Web3.providers.WebsocketProvider(config["networks"]["97"]["ethWssProvider"], {
+          clientConfig: {
+            maxReceivedFrameSize: 100000000,
+            maxReceivedMessageSize: 100000000,
+          }
+        })
         if (!PRIVATE_KEY) return webSocketProvider;
         HDWalletProvider.prototype.on = webSocketProvider.on.bind(webSocketProvider)
         return new HDWalletProvider(PRIVATE_KEY, webSocketProvider)
@@ -95,10 +111,15 @@ module.exports = {
     },
     ropsten: {
       provider: function() {
-        return PRIVATE_KEY ? new HDWalletProvider(PRIVATE_KEY, config["networks"]["3"]["ethProvider"]) : new Web3.providers.HttpProvider(config["networks"]["3"]["ethProvider"])
+        return PRIVATE_KEY_DEPLOYER ? new HDWalletProvider(PRIVATE_KEY_DEPLOYER, config["networks"]["3"]["ethProvider"]) : new Web3.providers.HttpProvider(config["networks"]["3"]["ethProvider"])
       },
       wsprovider: function() {
-        const webSocketProvider = new Web3.providers.WebsocketProvider(config["networks"]["3"]["ethWssProvider"])
+        const webSocketProvider = new Web3.providers.WebsocketProvider(config["networks"]["3"]["ethWssProvider"], {
+          clientConfig: {
+            maxReceivedFrameSize: 100000000,
+            maxReceivedMessageSize: 100000000,
+          }
+        })
         if (!PRIVATE_KEY) return webSocketProvider;
         HDWalletProvider.prototype.on = webSocketProvider.on.bind(webSocketProvider)
         return new HDWalletProvider(PRIVATE_KEY, webSocketProvider)
