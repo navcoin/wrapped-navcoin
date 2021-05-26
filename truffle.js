@@ -48,6 +48,28 @@ config["publicKeyNav"] = XPUBKEY;
 
 fs.writeFileSync("config.json", JSON.stringify(config, null, 4));
 
+const options = {
+    timeout: 30000, // ms
+
+    clientConfig: {
+        // Useful if requests are large
+        maxReceivedFrameSize: 100000000,   // bytes - default: 1MiB
+        maxReceivedMessageSize: 100000000, // bytes - default: 8MiB
+
+        // Useful to keep a connection alive
+        keepalive: true,
+        keepaliveInterval: -1 // ms
+    },
+
+    // Enable auto reconnection
+    reconnect: {
+        auto: true,
+        delay: 2000, // ms
+        maxAttempts: 60,
+        onTimeout: false
+    }
+};
+
 module.exports = {
   compilers: {
     solc: {
@@ -62,7 +84,7 @@ module.exports = {
         return PRIVATE_KEY_DEPLOYER ? new HDWalletProvider(PRIVATE_KEY_DEPLOYER, config["networks"]["123"]["ethProvider"]) : new Web3.providers.HttpProvider(config["networks"]["123"]["ethProvider"])
       },
       wsprovider: function() {
-        const webSocketProvider = new Web3.providers.WebsocketProvider(config["networks"]["123"]["ethWssProvider"])
+        const webSocketProvider = new Web3.providers.WebsocketProvider(config["networks"]["123"]["ethWssProvider"], options)
         if (!PRIVATE_KEY) return webSocketProvider;
         HDWalletProvider.prototype.on = webSocketProvider.on.bind(webSocketProvider)
         return new HDWalletProvider(PRIVATE_KEY, webSocketProvider)
@@ -76,12 +98,7 @@ module.exports = {
         return PRIVATE_KEY_DEPLOYER ? new HDWalletProvider(PRIVATE_KEY_DEPLOYER, config["networks"]["56"]["ethProvider"]) : new Web3.providers.HttpProvider(config["networks"]["56"]["ethProvider"])
       },
       wsprovider: function() {
-        const webSocketProvider = new Web3.providers.WebsocketProvider(config["networks"]["56"]["ethWssProvider"], {
-          clientConfig: {
-            maxReceivedFrameSize: 100000000,
-            maxReceivedMessageSize: 100000000,
-          }
-        })
+        const webSocketProvider = new Web3.providers.WebsocketProvider(config["networks"]["56"]["ethWssProvider"], options)
         if (!PRIVATE_KEY) return webSocketProvider;
         HDWalletProvider.prototype.on = webSocketProvider.on.bind(webSocketProvider)
         return new HDWalletProvider(PRIVATE_KEY, webSocketProvider)
@@ -95,12 +112,7 @@ module.exports = {
         return PRIVATE_KEY_DEPLOYER ? new HDWalletProvider(PRIVATE_KEY_DEPLOYER, config["networks"]["97"]["ethProvider"]) : new Web3.providers.HttpProvider(config["networks"]["97"]["ethProvider"])
       },
       wsprovider: function() {
-        const webSocketProvider = new Web3.providers.WebsocketProvider(config["networks"]["97"]["ethWssProvider"], {
-          clientConfig: {
-            maxReceivedFrameSize: 100000000,
-            maxReceivedMessageSize: 100000000,
-          }
-        })
+        const webSocketProvider = new Web3.providers.WebsocketProvider(config["networks"]["97"]["ethWssProvider"], options)
         if (!PRIVATE_KEY) return webSocketProvider;
         HDWalletProvider.prototype.on = webSocketProvider.on.bind(webSocketProvider)
         return new HDWalletProvider(PRIVATE_KEY, webSocketProvider)
@@ -114,12 +126,7 @@ module.exports = {
         return PRIVATE_KEY_DEPLOYER ? new HDWalletProvider(PRIVATE_KEY_DEPLOYER, config["networks"]["3"]["ethProvider"]) : new Web3.providers.HttpProvider(config["networks"]["3"]["ethProvider"])
       },
       wsprovider: function() {
-        const webSocketProvider = new Web3.providers.WebsocketProvider(config["networks"]["3"]["ethWssProvider"], {
-          clientConfig: {
-            maxReceivedFrameSize: 100000000,
-            maxReceivedMessageSize: 100000000,
-          }
-        })
+        const webSocketProvider = new Web3.providers.WebsocketProvider(config["networks"]["3"]["ethWssProvider"], options)
         if (!PRIVATE_KEY) return webSocketProvider;
         HDWalletProvider.prototype.on = webSocketProvider.on.bind(webSocketProvider)
         return new HDWalletProvider(PRIVATE_KEY, webSocketProvider)

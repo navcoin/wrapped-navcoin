@@ -26,6 +26,7 @@
   "homepage": "",
   "dependencies": {
     "@codewarriorr/electrum-client-js": "^0.1.1",
+    "async-mutex": "^0.3.1",
     "bitcore-lib": "git://github.com/aguycalled/bitcore-lib.git",
     "bootstrap-jquery": "^3.3.2",
     "css-loader": "^5.0.2",

@@ -21,6 +21,10 @@
   <body>
     <main class="container-fluid">
       <header>
+<div class="alert">
+  <span class="closebtn" onclick="this.parentElement.style.display='none';">&times;</span>
+  The BSC network is currently congested! Deposits and withdrawals can take longer than usual.
+</div>
         <div id="logo-container">
           <img id="mm-logo" src="wnav.svg" width=200 style="margin-top:50px;margin-bottom:50px"/>
           <h1 id="logo-text" class="text-center">
@@ -80,6 +84,7 @@
                   <a class="nav-item nav-link active" id="nav-deposit-tab" data-toggle="tab" href="#nav-deposit" role="tab" aria-controls="nav-deposit" aria-selected="true">Deposit NAV</a>
                   <a class="nav-item nav-link" id="nav-withraw-tab" data-toggle="tab" href="#nav-withdraw" role="tab" aria-controls="nav-withdraw" aria-selected="false">Withdraw wNAV</a>
                   <a class="nav-item nav-link" id="nav-history-tab" data-toggle="tab" href="#nav-history" role="tab" aria-controls="nav-history" aria-selected="false">History</a>
+                  <a class="nav-item nav-link" id="nav-farming-tab" data-toggle="tab" href="#nav-farming" role="tab" aria-controls="nav-farming" aria-selected="false">Farming</a>
                 </div>
               </nav>
 
@@ -148,6 +153,9 @@
                 </div>
                 <div class="tab-pane fade" id="nav-history" role="tabpanel" aria-labelledby="nav-history-tab">
                   <div id="historyTbl" class="d-flex justify-content-center">Loading...</div>
+                </div>
+                <div class="tab-pane fade" id="nav-farming" role="tabpanel" aria-labelledby="nav-farming-tab">
+                  <div id="farmingDiv" class="d-flex justify-content-center">Coming soon...</div>
                 </div>
               </div>
             </div>

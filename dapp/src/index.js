@@ -6,12 +6,15 @@ import $ from 'jquery'
 import * as toastr from 'toastr';
 import css from './/../node_modules/toastr/build/toastr.css';
 import moment from 'moment';
+import * as Mutex from 'async-mutex';
 
 let NAVETH = 0
 let NAVBTC = 0
 let ETHBTC = 0
 let FETCH_PRICE_FREQUENCY = 900
 let lastPriceCheck = 0
+
+var mutex = new Mutex.Mutex();
 
 toastr.options = {
   "closeButton": false,
@@ -144,6 +147,28 @@ let lastNavBlock = -1;
 let lastEthBlock = -1;
 let coldStorageScriptHash
 let coldStorageScript
+let blockLoop = 0;
+let cacheNavTx = {};
+let history = [];
+let processedNav = {};
+let processedNavCold = {};
+let burns = {};
+let totalBurntValue = 0;
+
+function dumpError(err) {
+  if (typeof err === 'object') {
+    if (err.message) {
+      console.log('\nMessage: ' + err.message)
+    }
+    if (err.stack) {
+      console.log('\nStacktrace:')
+      console.log('====================')
+      console.log(err.stack);
+    }
+  } else {
+    console.log('dumpError :: argument is not an object');
+  }
+}
 
 const initialize = async () => {
 
@@ -208,12 +233,15 @@ const initialize = async () => {
 
   const NewNavBlockHeader = async (event) => {
     lastNavBlock = event[0].height;
+    console.log("New NAV block: "+ lastNavBlock);
   }
 
   const NewBlockHeader = async () => {
     gasPrice = await window.Web3.eth.getGasPrice()/1000000000;
 
     var block = await window.Web3.eth.getBlock('latest')
+
+    if (!block) return;
 
     lastEthBlock = block.number;
 
@@ -378,7 +406,7 @@ const initialize = async () => {
             wnavBalanceWithdraw.innerHTML = 0
           } else if (result) {
             wBal = result/100000000
-            wnavBalance.innerHTML = result/100000000
+            wnavBalance.innerHTML = (result/100000000).toLocaleString()
             wnavBalanceWithdraw.innerHTML = result/100000000
           } else if (!result) {
             wBal = 0
@@ -390,7 +418,7 @@ const initialize = async () => {
           if (err){
             wnavSupply.innerHTML = 0
           } else if (result) {
-            wnavSupply.innerHTML = result/100000000
+            wnavSupply.innerHTML = (result/100000000).toLocaleString()
           } else if (!result) {
             wnavSupply.innerHTML = 0
           }
@@ -398,14 +426,20 @@ const initialize = async () => {
 
       }
 
-      if (client)
+      if (client && lastNavBlock != -1 && gasCost != 0)
       {
-        const navcoldsupply = await client.blockchain_scripthash_getBalance(coldStorageScriptHash)
+        const navcoldsupply = await client.blockchain_scripthash_listunspent(coldStorageScriptHash)
 
-        var bal = parseInt(navcoldsupply.confirmed) + parseInt(navcoldsupply.unconfirmed)
+        var bal = 0;
+
+        for (var i = 0; i < navcoldsupply.length; i++)
+        {
+          var txout = navcoldsupply[i];
+          bal += txout.value;
+        }
 
         if (bal > 0)
-          navSupply.innerHTML = bal/100000000
+          navSupply.innerHTML = (bal/100000000).toLocaleString()
         else
           navSupply.innerHTML = 0
 
@@ -415,15 +449,15 @@ const initialize = async () => {
         for (var i = 0; i < scripthashStatus.length; i++)
         {
           var txout = scripthashStatus[i];
-          if (txout.height == 0 || lastNavBlock == -1)
+          if (txout.height == 0)
           {
-            continue;
+            //continue;
           }
           if (lastNavBlock - txout.height < config["navConfirmations"])
           {
-            continue;
+            //continue;
           }
-          if (gasCost == 0 || txout.value < gasCost) continue;
+          //if (txout.value < gasCost) continue;
           await contract.methods.existsMint(txout.tx_hash+":"+txout.tx_pos).call().then((result, err) => {
             if (!err && !result){
               pendingBalance += txout.value;
@@ -514,7 +548,7 @@ const initialize = async () => {
           },
         });
       } catch (error) {
-        console.log(error);
+        dumpError(error);
       }
     }
   }
@@ -532,6 +566,15 @@ const initialize = async () => {
     } else {
       navNetwork = 'testnet'
     }
+
+    if (networkId == 56) blockLoop = 6139248;
+    if (networkId == 97) blockLoop = 0;
+
+    history = [];
+    processedNav = {};
+    processedNavCold = {};
+    burns = {};
+    totalBurntValue = 0;
 
     networkName.innerHTML = networkNames[globalNetworkId];
 
@@ -575,7 +618,6 @@ const initialize = async () => {
       var navObj = Bitcore.HDPublicKey(obj).deriveChild(childPath).publicKey
 
       coldAddresses.push(navObj);
-      console.log("cold addresses "+navObj);
     }
 
 
@@ -605,205 +647,215 @@ const initialize = async () => {
     }
   }
 
+  async function GetNavTx(hash) {
+    if (cacheNavTx[hash]) return cacheNavTx[hash];
+    var tx = await client.blockchain_transaction_get(hash, true);
+    cacheNavTx[hash] = tx;
+    return cacheNavTx[hash];
+  }
+
   async function GetHistory() {
-    var history = [];
-
-    if (isMetaMaskConnected() && contract && contract.methods && contract.methods.register && lastNavBlock != -1 && lastEthBlock != -1)
-    {
-      var block = 6139248;
-
-      while (block < lastEthBlock)
+    await mutex
+    .runExclusive(async function() {
+      if (isMetaMaskConnected() && contract && contract.methods && contract.methods.register && lastNavBlock != -1 && lastEthBlock != -1)
       {
-        await contract.getPastEvents(
-        "Registered",
-        { fromBlock: block, toBlock: Math.min(block+5000,lastEthBlock), filter: {"a": window.Web3.utils.toChecksumAddress(accounts[0])}}, async (errors, events) => {
-          if (errors)
-          {
-            console.log("Error Registered: "+ errors);
-          }
-          else
-          {
-            for (var i in events) {
-              var timestamp = await window.Web3.eth.getBlock(events[i].blockNumber);
-              var confirmations = lastEthBlock-events[i].blockNumber >= config["ethConfirmations"] ? checkmark : Math.min(lastEthBlock-events[i].blockNumber,config["ethConfirmations"])+"/"+config["ethConfirmations"];
-              history.push({timestamp: timestamp.timestamp, event: "Registered", confirmations: confirmations})
-            }
-          }
-        });
+        var coldScriptHistory = await client.blockchain_scripthash_getHistory(coldStorageScriptHash)
 
-        await contract.getPastEvents(
-        "MintedWithNote",
-        { fromBlock: block, toBlock: Math.min(block+5000,lastEthBlock), filter: {"a": window.Web3.utils.toChecksumAddress(accounts[0])}}, async (errors, events) => {
-          if (errors)
-          {
-            console.log("Error Minted: "+ errors);
-          }
-          else
-          {
-            for (var i in events) {
-              var timestamp = await window.Web3.eth.getBlock(events[i].blockNumber);
-              var confirmations = lastEthBlock-events[i].blockNumber >= config["ethConfirmations"] ? checkmark : Math.min(lastEthBlock-events[i].blockNumber,config["ethConfirmations"])+"/"+config["ethConfirmations"];
-              history.push({timestamp: timestamp.timestamp, event: "Minted "+parseInt(events[i].returnValues["1"])/100000000+ " wNAV", confirmations: confirmations})
-            }
-          }
-        });
-
-        var burns = {};
-
-        await contract.getPastEvents(
-        "BurnedWithNote",
-        { fromBlock: block, toBlock: Math.min(block+5000,lastEthBlock)}, async (errors, events) => {
-          if (errors)
-          {
-            console.log("Error BurnedWithNote: "+ errors);
-          }
-          else
-          {
-            var totalBurntValue = 0;
-
-            for (var i in events) {
-              totalBurntValue += parseInt(events[i].returnValues["1"]);
-              if (events[i].returnValues["a"] != window.Web3.utils.toChecksumAddress(accounts[0]))
-                continue;
-              burns[events[i].transactionHash] = events[i].returnValues["a"];
-              var timestamp = await window.Web3.eth.getBlock(events[i].blockNumber);
-              var confirmations = lastEthBlock-events[i].blockNumber >= config["ethConfirmations"] ? checkmark : Math.min(lastEthBlock-events[i].blockNumber,config["ethConfirmations"])+"/"+config["ethConfirmations"];
-              history.push({timestamp: timestamp.timestamp, event: "Burned "+parseInt(events[i].returnValues["1"])/100000000+ " wNAV", confirmations: confirmations})
-            }
-
-            var scriptHistory = await client.blockchain_scripthash_getHistory(coldStorageScriptHash)
-
-            var totalWithdrawnValue = 0;
-
-            for (var i in scriptHistory)
+        while (blockLoop < lastEthBlock)
+        {
+          //console.log("checking from "+blockLoop+" to "+Math.min(blockLoop+5000,lastEthBlock));
+          await contract.getPastEvents(
+          "Registered",
+          { fromBlock: blockLoop, toBlock: Math.min(blockLoop+5000,lastEthBlock), filter: {"a": window.Web3.utils.toChecksumAddress(accounts[0])}}, async (errors, events) => {
+            if (errors)
             {
-              var tx = scriptHistory[i];
-
-              tx = await client.blockchain_transaction_get(tx.tx_hash, true)
-
-              try {
-                if (!tx.strdzeel) continue;
-
-                var json = JSON.parse(tx.strdzeel)
-                var jsonStrdzeel = json.burn
-
-                if (jsonStrdzeel["returnValues"] && jsonStrdzeel["returnValues"]["0"] && jsonStrdzeel["returnValues"]["1"] && jsonStrdzeel["returnValues"]["2"] && jsonStrdzeel["transactionHash"])
-                {
-                  var value = 0
-
-                  for (var out_index in tx.vout)
-                  {
-                    if(tx.vout[out_index].scriptPubKey.addresses && tx.vout[out_index].scriptPubKey.addresses[0] == jsonStrdzeel["returnValues"]["2"])
-                      value += tx.vout[out_index].valueSat;
-                  }
-                  if (value > 0 && value == parseInt(jsonStrdzeel["returnValues"]["1"])-parseInt(DEFAULT_TX_FEE))
-                    totalWithdrawnValue += value+parseInt(DEFAULT_TX_FEE);
-                }
-              } catch (e) {
-                continue;
+              console.log("Error Registered: "+ errors);
+            }
+            else
+            {
+              for (var i in events) {
+                var timestamp = await window.Web3.eth.getBlock(events[i].blockNumber);
+                var confirmations = lastEthBlock-events[i].blockNumber >= config["ethConfirmations"] ? checkmark : Math.min(lastEthBlock-events[i].blockNumber,config["ethConfirmations"])+"/"+config["ethConfirmations"];
+                history.push({timestamp: timestamp.timestamp, event: "Registered", confirmations: confirmations})
               }
             }
+          });
 
-            if (totalBurntValue > 0)
-              pendingWithdrawalSupply.innerHTML = parseInt(totalBurntValue-totalWithdrawnValue)/100000000;
-          }
-        });
+          await contract.getPastEvents(
+          "MintedWithNote",
+          { fromBlock: blockLoop, toBlock: Math.min(blockLoop+5000,lastEthBlock), filter: {"a": window.Web3.utils.toChecksumAddress(accounts[0])}}, async (errors, events) => {
+            if (errors)
+            {
+              console.log("Error Minted: "+ errors);
+            }
+            else
+            {
+              for (var i in events) {
+                var timestamp = await window.Web3.eth.getBlock(events[i].blockNumber);
+                var confirmations = lastEthBlock-events[i].blockNumber >= config["ethConfirmations"] ? checkmark : Math.min(lastEthBlock-events[i].blockNumber,config["ethConfirmations"])+"/"+config["ethConfirmations"];
+                history.push({timestamp: timestamp.timestamp, event: "Minted "+parseInt(events[i].returnValues["1"])/100000000+ " wNAV", confirmations: confirmations})
+              }
+            }
+          });
 
-        block += 5000;
-      }
+          await contract.getPastEvents(
+          "BurnedWithNote",
+          { fromBlock: blockLoop, toBlock: Math.min(blockLoop+5000,lastEthBlock)}, async (errors, events) => {
+            if (errors)
+            {
+              console.log("Error BurnedWithNote: "+ errors);
+            }
+            else
+            {
+              for (var i in events) {
+                totalBurntValue += parseInt(events[i].returnValues["1"]);
+                if (events[i].returnValues["a"] != window.Web3.utils.toChecksumAddress(accounts[0]))
+                  continue;
+                burns[events[i].transactionHash] = events[i].returnValues["a"];
+                var timestamp = await window.Web3.eth.getBlock(events[i].blockNumber);
+                var confirmations = lastEthBlock-events[i].blockNumber >= config["ethConfirmations"] ? checkmark : Math.min(lastEthBlock-events[i].blockNumber,config["ethConfirmations"])+"/"+config["ethConfirmations"];
+                history.push({timestamp: timestamp.timestamp, event: "Burned "+parseInt(events[i].returnValues["1"])/100000000+ " wNAV", confirmations: confirmations})
+              }
 
+              var totalWithdrawnValue = 0;
 
-      var scriptHistory = await client.blockchain_scripthash_getHistory(scriptHash)
+              for (var i in coldScriptHistory)
+              {
+                var tx = coldScriptHistory[i];
 
-      for (var i in scriptHistory)
-      {
-        var tx = scriptHistory[i];
+                tx = await GetNavTx(tx.tx_hash)
 
-        tx = await client.blockchain_transaction_get(tx.tx_hash, true)
+                try {
+                  if (!tx.strdzeel) continue;
 
-        var value = 0
+                  var json = JSON.parse(tx.strdzeel)
+                  var jsonStrdzeel = json.burn
 
-        for (var out_index in tx.vout)
-        {
-          if(tx.vout[out_index].scriptPubKey.addresses && tx.vout[out_index].scriptPubKey.addresses[0] == navAddressStr)
-            value += tx.vout[out_index].valueSat;
+                  if (jsonStrdzeel["returnValues"] && jsonStrdzeel["returnValues"]["0"] && jsonStrdzeel["returnValues"]["1"] && jsonStrdzeel["returnValues"]["2"] && jsonStrdzeel["transactionHash"])
+                  {
+                    var value = 0
+
+                    for (var out_index in tx.vout)
+                    {
+                      if(tx.vout[out_index].scriptPubKey.addresses && tx.vout[out_index].scriptPubKey.addresses[0] == jsonStrdzeel["returnValues"]["2"])
+                        value += tx.vout[out_index].valueSat;
+                    }
+                    if (value > 0 && value == parseInt(jsonStrdzeel["returnValues"]["1"])-parseInt(DEFAULT_TX_FEE))
+                      totalWithdrawnValue += value+parseInt(DEFAULT_TX_FEE);
+                  }
+                } catch (e) {
+                  dumpError(e);
+                }
+              }
+
+              if (totalBurntValue > 0)
+                pendingWithdrawalSupply.innerHTML = parseInt(totalBurntValue-totalWithdrawnValue)/100000000;
+            }
+          });
+
+          blockLoop = Math.min(blockLoop+5000, lastEthBlock);
         }
 
-        if (value > 0)
+        var scriptHistory = await client.blockchain_scripthash_getHistory(scriptHash)
+
+        for (var i in scriptHistory)
         {
-          var confirmations = Math.min(tx.confirmations,config["navConfirmations"]) == config["navConfirmations"] ? checkmark : Math.min(tx.confirmations,config["navConfirmations"])+"/"+config["navConfirmations"];
-          history.push({timestamp: tx.blocktime, event: "Deposited "+parseInt(value)/100000000+ " NAV", confirmations: confirmations});
-        }
-      }
+          var tx = scriptHistory[i];
 
-      scriptHistory = await client.blockchain_scripthash_getHistory(coldStorageScriptHash)
+          var hash = tx.tx_hash;
+          tx = await GetNavTx(tx.tx_hash)
 
-      for (var i in scriptHistory)
-      {
-        var tx = scriptHistory[i];
 
-        tx = await client.blockchain_transaction_get(tx.tx_hash, true)
+          if (processedNav[hash] == true) continue;
 
-        if (!tx.strdzeel)
-          continue;
-
-        try
-        {
-          var jsonStrdzeel = JSON.parse(tx.strdzeel)
+          processedNav[hash] = true;
 
           var value = 0
 
-          if (jsonStrdzeel.networkId != globalNetworkId)
-            continue;
-
           for (var out_index in tx.vout)
           {
-            if(tx.vout[out_index].scriptPubKey.addresses && tx.vout[out_index].scriptPubKey.addresses[0] == jsonStrdzeel.burn.returnValues["2"] && burns[jsonStrdzeel.burn.transactionHash])
-             value += tx.vout[out_index].valueSat;
+            if(tx.vout[out_index].scriptPubKey.addresses && tx.vout[out_index].scriptPubKey.addresses[0] == navAddressStr)
+              value += tx.vout[out_index].valueSat;
           }
 
           if (value > 0)
           {
             var confirmations = Math.min(tx.confirmations,config["navConfirmations"]) == config["navConfirmations"] ? checkmark : Math.min(tx.confirmations,config["navConfirmations"])+"/"+config["navConfirmations"];
-            history.push({timestamp: tx.blocktime, event: "Withdrawn "+parseInt(value)/100000000+ " NAV to "+jsonStrdzeel.burn.returnValues["2"], confirmations: confirmations});
+            history.push({timestamp: tx.blocktime, event: "Deposited "+parseInt(value)/100000000+ " NAV", confirmations: confirmations});
           }
         }
-        catch(e) {
-          console.error(e);
+
+        for (var i in coldScriptHistory)
+        {
+          var tx = coldScriptHistory[i];
+
+          var hash = tx.tx_hash;
+          tx = await GetNavTx(tx.tx_hash)
+
+          if (processedNavCold[hash] == true) continue;
+
+          processedNavCold[hash] = true;
+
+          if (!tx.strdzeel)
+            continue;
+
+          try
+          {
+            var jsonStrdzeel = JSON.parse(tx.strdzeel)
+
+            var value = 0
+
+            if (jsonStrdzeel.networkId != globalNetworkId)
+              continue;
+
+            for (var out_index in tx.vout)
+            {
+              if(tx.vout[out_index].scriptPubKey.addresses && tx.vout[out_index].scriptPubKey.addresses[0] == jsonStrdzeel.burn.returnValues["2"] && burns[jsonStrdzeel.burn.transactionHash])
+               value += tx.vout[out_index].valueSat;
+            }
+
+            if (value > 0)
+            {
+              var confirmations = Math.min(tx.confirmations,config["navConfirmations"]) == config["navConfirmations"] ? checkmark : Math.min(tx.confirmations,config["navConfirmations"])+"/"+config["navConfirmations"];
+              history.push({timestamp: tx.blocktime, event: "Withdrawn "+parseInt(value)/100000000+ " NAV to "+jsonStrdzeel.burn.returnValues["2"], link: 'https://navexplorer.com/tx/'+hash, confirmations: confirmations});
+            }
+          }
+          catch(e) {
+            console.error(e);
+          }
         }
-      }
 
-      history = history.sort(function(a,b) {
-          return b.timestamp - a.timestamp
-      });
+        history = history.sort(function(a,b) {
+            return b.timestamp - a.timestamp
+        });
 
-      var tbl = document.createElement('table');
-      var thead = document.createElement("thead");
-      var tbody = document.createElement("tbody")
+        var tbl = document.createElement('table');
+        var thead = document.createElement("thead");
+        var tbody = document.createElement("tbody")
 
-      var tr_head = document.createElement("tr");
+        var tr_head = document.createElement("tr");
 
-      var th_time = document.createElement("th");
-      var th_spacer = document.createElement("th");
-      var th_name = document.createElement("th");
-      var th_spacer_2 = document.createElement("th");
-      var th_confirmations = document.createElement("th");
+        var th_time = document.createElement("th");
+        var th_spacer = document.createElement("th");
+        var th_name = document.createElement("th");
+        var th_spacer_2 = document.createElement("th");
+        var th_confirmations = document.createElement("th");
 
-      th_time.textContent = "Time";
-      th_spacer.innerHTML = '&nbsp;&nbsp; ';
-      th_name.textContent = "Event";
-      th_spacer_2.innerHTML = '&nbsp;&nbsp; ';
-      th_confirmations.textContent = "Confirmations";
+        th_time.textContent = "Time";
+        th_spacer.innerHTML = '&nbsp;&nbsp; ';
+        th_name.textContent = "Event";
+        th_spacer_2.innerHTML = '&nbsp;&nbsp; ';
+        th_confirmations.textContent = "Confirmations";
 
-      tr_head.appendChild(th_time);
-      tr_head.appendChild(th_spacer);
-      tr_head.appendChild(th_name);
-      tr_head.appendChild(th_spacer_2);
-      tr_head.appendChild(th_confirmations);
+        tr_head.appendChild(th_time);
+        tr_head.appendChild(th_spacer);
+        tr_head.appendChild(th_name);
+        tr_head.appendChild(th_spacer_2);
+        tr_head.appendChild(th_confirmations);
 
-      thead.appendChild(tr_head);
+        thead.appendChild(tr_head);
 
-      for(var i = 0, j = history.length; i < j; i++) {
+        for(var i = 0, j = history.length; i < j; i++) {
           var tr_body = document.createElement("tr");
 
           var td_time = document.createElement("td");
@@ -815,6 +867,10 @@ const initialize = async () => {
           td_time.textContent = new moment(history[i].timestamp*1000).format('MMM D, YYYY, HH:mmA');
           td_spacer.innerHTML = '&nbsp;&nbsp; ';
           td_name.textContent = history[i].event;
+
+          if (history[i].link)
+            td_name.innerHTML += '&nbsp;<a href="'+history[i].link+'">Link</a>';
+
           td_spacer_2.innerHTML = '&nbsp;&nbsp; ';
           td_confirmations.innerHTML = history[i].confirmations;
 
@@ -825,22 +881,23 @@ const initialize = async () => {
           tr_body.appendChild(td_confirmations);
 
           tbody.appendChild(tr_body);
-      }
+        }
 
 
-      tbl.appendChild(thead);
-      tbl.appendChild(tbody);
+        tbl.appendChild(thead);
+        tbl.appendChild(tbody);
 
-      if (history.length > 0)
-      {
-        historyTbl.innerHTML = '';
-        historyTbl.appendChild(tbl);
+        if (history.length > 0)
+        {
+          historyTbl.innerHTML = '';
+          historyTbl.appendChild(tbl);
+        }
+        else
+        {
+          historyTbl.innerHTML = 'There is no swap history.';
+        }
       }
-      else
-      {
-        historyTbl.innerHTML = 'There is no swap history.';
-      }
-    }
+    });
   }
 
   async function RestartSubscriptions () {
